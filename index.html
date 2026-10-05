@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Квест «Секретная комната»</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+  :root{
+    --bg:#0f0e17;
+    --room-wall:#1a1a2e;
+    --room-wall-light:#252545; /* Более светлая стена при включенном свете */
+    --room-floor:#16213e;
+    --room-floor-light:#203045;
+    --accent:#e94560;
+    --gold:#f5c518;
+    --gold-glow:#f5c51866;
+    --door-wood:#5c3a1e;
+    --door-wood-light:#7a4f2b;
+    --text:#eaeaea;
+    --text-dim:#8888aa;
+    --msg-bg:#1e1e36;
+    --success:#00d68f;
+    --crystal:#a855f7;
+    --crystal-glow:#a855f766;
+  }
+
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    overflow-x:hidden;
+  }
+
+  header{
+    text-align:center;
+    padding:28px 16px 12px;
+    width:100%;
+  }
+  header h1{
+    font-size:clamp(1.4rem,4vw,2rem);
+    font-weight:700;
+    letter-spacing:.5px;
+    background:linear-gradient(135deg,var(--gold),var(--accent));
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+  header p{
+    color:var(--text-dim);
+    font-size:.92rem;
+    margin-top:6px;
+  }
+
+  /* ── Status bar ── */
+  .status-bar{
+    display:flex;
+    gap:12px;
+    justify-content:center;
+    flex-wrap:wrap;
+    padding:10px 16px 18px;
+    font-size:.85rem;
+  }
+  .status-item{
+    display:flex;align-items:center;gap:6px;
+    background:var(--msg-bg);
+    padding:6px 14px;
+    border-radius:20px;
+    border:1px solid #2a2a4a;
+    transition:all .4s;
+  }
+  .status-item.active{
+    border-color:var(--gold);
+    box-shadow:0 0 12px var(--gold-glow);
+  }
+  .status-item .dot{
+    width:10px;height:10px;border-radius:50%;
+    background:#444;
+    transition:background .4s,box-shadow .4s;
+  }
+  .status-item.active .dot{
+    background:var(--gold);
+    box-shadow:0 0 8px var(--gold);
+  }
+  .status-item.done .dot{
+    background:var(--success);
+    box-shadow:0 0 8px var(--success);
+  }
+  .status-item.done{
+    border-color:var(--success);
+    box-shadow:0 0 12px #00d68f33;
+  }
+
+  /* ── Game area ── */
+  .game-wrapper{
+    width:100%;
+    max-width:720px;
+    padding:0 16px;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  .room{
+    position:relative;
+    width:100%;
+    aspect-ratio:16/10;
+    max-height:420px;
+    background:var(--room-wall);
+    border-radius:16px;
+    overflow:hidden;
+    border:2px solid #2a2a4a;
+    box-shadow:0 8px 40px #00000060;
+    transition:background 0.8s ease;
+  }
+  
+  /* Состояние комнаты при включенном свете */
+  .room.lights-on{
+    background:var(--room-wall-light);
+    border-color: #3a3a5a;
+  }
+
+  .room::before{
+    content:'';position:absolute;inset:0;
+    background:
+      repeating-linear-gradient(90deg,transparent,transparent 79px,#1f1f3822 79px,#1f1f3822 80px),
+      repeating-linear-gradient(0deg,transparent,transparent 59px,#1f1f3822 59px,#1f1f3822 60px);
+    pointer-events:none;
+    transition: opacity 0.8s;
+  }
+  .room.lights-on::before{
+    opacity: 0.3; /* Узоры становятся менее заметными при свете */
+  }
+
+  .floor{
+    position:absolute;bottom:0;left:0;right:0;height:35%;
+    background:linear-gradient(180deg,#1e2a45,#162035);
+    border-top:2px solid #2a3a5a;
+    transition:background 0.8s ease;
+  }
+  .room.lights-on .floor{
+    background:linear-gradient(180deg, var(--room-floor-light), #2a4060);
+  }
+  .floor::before{
+    content:'';position:absolute;inset:0;
+    background:repeating-linear-gradient(90deg,transparent,transparent 59px,#1a2540 59px,#1a2540 60px);
+    opacity:.5;
+  }
+
+  /* ── Furniture ── */
+  .shelf{
+    position:absolute;
+    left:8%;top:22%;
+    width:28%;height:6px;
+    background:linear-gradient(90deg,#3a2a1a,#5c3a1e,#3a2a1a);
+    border-radius:2px;
+    box-shadow:0 3px 8px #00000050;
+  }
+  .shelf::before{content:'📚';position:absolute;top:-28px;left:10%;font-size:1.4rem;}
+  .shelf::after{content:'🏺';position:absolute;top:-30px;right:15%;font-size:1.3rem;}
+
+  .table{
+    position:absolute;
+    left:5%;bottom:35%;
+    width:30%;height:4px;
+    background:linear-gradient(90deg,#4a3520,#6b4c30,#4a3520);
+    border-radius:2px;
+    box-shadow:0 3px 8px #00000050;
+  }
+  .table-leg-l,.table-leg-r{
+    position:absolute;bottom:-30px;width:4px;height:30px;
+    background:#4a3520;border-radius:0 0 2px 2px;
+  }
+  .table-leg-l{left:10%}
+  .table-leg-r{right:10%}
+  .table::before{content:'🕯️';position:absolute;top:-26px;left:40%;font-size:1.2rem;}
+
+  .painting{
+    position:absolute;
+    left:42%;top:10%;
+    width:16%;aspect-ratio:4/3;
+    background:linear-gradient(135deg,#2a1a3a,#1a2a3a);
+    border:3px solid #5c4a3a;
+    border-radius:3px;
+    box-shadow:0 4px 12px #00000040;
+    display:flex;align-items:center;justify-content:center;
+    font-size:clamp(1rem,3vw,1.6rem);
+  }
+
+  /* ── Key ── */
+  .key{
+    position:absolute;
+    left:18%;bottom:12%;
+    font-size:clamp(1.6rem,5vw,2.4rem);
+    cursor:pointer;
+    user-select:none;
+    transition:transform .3s,filter .3s,opacity .5s;
+    animation:keyFloat 2.5s ease-in-out infinite,keyGlow 2s ease-in-out infinite;
+    filter:drop-shadow(0 0 6px var(--gold-glow));
+    z-index:10;
+  }
+  .key:hover{
+    transform:scale(1.25) rotate(-10deg);
+    filter:drop-shadow(0 0 16px var(--gold));
+  }
+  .key.found{
+    animation:keyFound .6s ease forwards;
+    pointer-events:none;
+  }
+
+  @keyframes keyFloat{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-6px)}
+  }
+  @keyframes keyGlow{
+    0%,100%{filter:drop-shadow(0 0 6px var(--gold-glow))}
+    50%{filter:drop-shadow(0 0 14px var(--gold))}
+  }
+  @keyframes keyFound{
+    0%{transform:scale(1);opacity:1}
+    50%{transform:scale(1.8) rotate(20deg);opacity:.8;filter:drop-shadow(0 0 30px var(--gold))}
+    100%{transform:scale(0) rotate(40deg);opacity:0}
+  }
+
+  /* ── Door ── */
+  .door-area{
+    position:absolute;
+    right:8%;bottom:35%;
+    width:22%;height:58%;
+    perspective:600px;
+    z-index:5;
+  }
+  .door-frame{
+    position:absolute;inset:-6px;
+    border:6px solid #3a2a1a;
+    border-radius:6px 6px 0 0;
+    background:#0a0a15;
+    z-index:0;
+  }
+  .door{
+    position:relative;
+    width:100%;height:100%;
+    background:linear-gradient(135deg,var(--door-wood),var(--door-wood-light),var(--door-wood));
+    border-radius:4px 4px 0 0;
+    cursor:pointer;
+    transform-origin:left center;
+    transition:transform .8s cubic-bezier(.4,.0,.2,1),box-shadow .4s;
+    z-index:1;
+    box-shadow:inset -3px 0 8px #00000040,2px 0 12px #00000030;
+  }
+  .door:hover:not(.open){
+    box-shadow:inset -3px 0 8px #00000040,0 0 20px var(--accent),2px 0 12px #00000030;
+  }
+  .door::before{
+    content:'';position:absolute;
+    right:12%;top:50%;transform:translateY(-50%);
+    width:10px;height:10px;border-radius:50%;
+    background:radial-gradient(circle,#c9a84c,#8a6d2b);
+    box-shadow:0 0 6px #c9a84c88;
+  }
+  .door::after{
+    content:'';position:absolute;
+    inset:12% 15%;
+    border:2px solid #4a3018;
+    border-radius:3px;
+    opacity:.5;
+  }
+  .door.open{
+    transform:rotateY(-110deg);
+    cursor:default;
+    pointer-events:none;
+  }
+
+  /* ── NEW: Light Switch ── */
+  .light-switch{
+    position:absolute;
+    right:33%;bottom:46%;
+    width:24px;height:36px;
+    background:#2a2a3a;
+    border:2px solid #4a4a5a;
+    border-radius:4px;
+    cursor:pointer;
+    z-index:6;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:all 0.3s ease;
+    filter:brightness(0.6);
+  }
+  .light-switch::after{
+    content:'';
+    width:10px;height:16px;
+    background:#555;
+    border-radius:2px;
+    transition:all 0.3s ease;
+  }
+  .light-switch:hover{
+    border-color:var(--text-dim);
+  }
+  .light-switch.on{
+    filter:brightness(1.2);
+    box-shadow:0 0 15px #ffffff44;
+  }
+  .light-switch.on::after{
+    background:var(--success);
+    box-shadow:0 0 8px var(--success);
+  }
+
+  /* ── Secret item ── */
+  .secret{
+    position:absolute;
+    right:10%;bottom:38%;
+    width:18%;height:50%;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    opacity:0;
+    transform:scale(.5);
+    transition:opacity .8s .4s,transform .8s .4s cubic-bezier(.34,1.56,.64,1);
+    z-index:0;
+    pointer-events:none;
+  }
+  .secret.visible{
+    opacity:1;
+    transform:scale(1);
+  }
+  .crystal{
+    font-size:clamp(2rem,7vw,3.5rem);
+    animation:crystalPulse 2s ease-in-out infinite;
+    filter:drop-shadow(0 0 20px var(--crystal-glow));
+  }
+  .crystal-label{
+    margin-top:6px;
+    font-size:.7rem;
+    color:var(--crystal);
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-weight:600;
+    opacity:.8;
+  }
+  @keyframes crystalPulse{
+    0%,100%{filter:drop-shadow(0 0 15px var(--crystal-glow));transform:scale(1)}
+    50%{filter:drop-shadow(0 0 35px var(--crystal));transform:scale(1.08)}
+  }
+
+  /* ── Particles ── */
+  .particles{
+    position:absolute;inset:0;pointer-events:none;z-index:20;overflow:hidden;
+  }
+  .particle{
+    position:absolute;
+    width:6px;height:6px;
+    border-radius:50%;
+    opacity:0;
+  }
+  .particle.burst{
+    animation:particleBurst 1s ease-out forwards;
+  }
+  @keyframes particleBurst{
+    0%{opacity:1;transform:translate(0,0) scale(1)}
+    100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0)}
+  }
+
+  /* ── Message area ── */
+  .messages{
+    width:100%;
+    max-width:720px;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    min-height:100px;
+  }
+  .msg{
+    padding:12px 18px;
+    border-radius:12px;
+    font-size:.92rem;
+    line-height:1.5;
+    animation:msgIn .4s ease;
+    border:1px solid #2a2a4a;
+  }
+  .msg.info{background:var(--msg-bg);color:var(--text);}
+  .msg.warn{background:#2a1a1a;border-color:var(--accent);color:#ff8a9e;}
+  .msg.success{background:#0a2a1a;border-color:var(--success);color:#66ffbb;}
+  .msg.epic{
+    background:linear-gradient(135deg,#1a0a2e,#0a1a2e);
+    border-color:var(--crystal);
+    color:#d8b4fe;
+    text-align:center;
+    font-weight:600;
+    font-size:1rem;
+  }
+  @keyframes msgIn{
+    from{opacity:0;transform:translateY(10px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+
+  /* ── NEW: Restart Button ── */
+  .restart-btn{
+    display:none; /* Скрыта по умолчанию */
+    margin:8px auto 24px;
+    padding:12px 28px;
+    background:linear-gradient(135deg, var(--accent), #c0354c);
+    color:white;
+    border:none;
+    border-radius:10px;
+    font-size:1rem;
+    font-weight:600;
+    cursor:pointer;
+    box-shadow:0 4px 15px #e9456044;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .restart-btn:hover{
+    transform:translateY(-2px) scale(1.03);
+    box-shadow:0 6px 20px #e9456066;
+  }
+  .restart-btn:active{
+    transform:translateY(0) scale(0.98);
+  }
+
+  .hint{
+    text-align:center;
+    color:var(--text-dim);
+    font-size:.8rem;
+    padding:8px 16px 24px;
+    opacity:.7;
+  }
+
+  /* ── Confetti ── */
+  .confetti-container{
+    position:fixed;inset:0;pointer-events:none;z-index:100;overflow:hidden;
+  }
+  .confetti-piece{
+    position:absolute;
+    width:8px;height:14px;
+    top:-20px;
+    opacity:0;
+  }
+  .confetti-piece.fall{
+    animation:confettiFall var(--dur) ease-in forwards;
+    animation-delay:var(--delay);
+  }
+  @keyframes confettiFall{
+    0%{opacity:1;transform:translateY(0) rotate(0deg) scale(1)}
+    80%{opacity:1}
+    100%{opacity:0;transform:translateY(100vh) rotate(var(--rot)) scale(.5)}
+  }
+
+  @media(max-width:480px){
+    .room{aspect-ratio:4/3;max-height:360px}
+    .status-bar{gap:8px}
+    .status-item{padding:5px 10px;font-size:.78rem}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔐 Квест «Секретная комната»</h1>
+  <p>Исследуй комнату, найди ключ и открой дверь…</p>
+</header>
+
+<div class="status-bar">
+  <div class="status-item" id="statusKey">
+    <span class="dot"></span>
+    <span>Ключ</span>
+  </div>
+  <div class="status-item" id="statusLight">
+    <span class="dot"></span>
+    <span>Свет</span>
+  </div>
+  <div class="status-item" id="statusDoor">
+    <span class="dot"></span>
+    <span>Дверь</span>
+  </div>
+  <div class="status-item" id="statusSecret">
+    <span class="dot"></span>
+    <span>Секрет</span>
+  </div>
+</div>
+
+<div class="game-wrapper">
+  <div class="room" id="room">
+    <div class="floor"></div>
+
+    <!-- Furniture -->
+    <div class="shelf"></div>
+    <div class="table">
+      <div class="table-leg-l"></div>
+      <div class="table-leg-r"></div>
+    </div>
+    <div class="painting">🌌</div>
+
+    <!-- Key -->
+    <div class="key" id="key" onclick="clickKey()" title="Нажми на ключ">🔑</div>
+
+    <!-- NEW: Light Switch -->
+    <div class="light-switch" id="lightSwitch" onclick="clickSwitch()" title="Включить свет"></div>
+
+    <!-- Door -->
+    <div class="door-area">
+      <div class="door-frame"></div>
+      <div class="door" id="door" onclick="clickDoor()" title="Нажми на дверь"></div>
+    </div>
+
+    <!-- Secret -->
+    <div class="secret" id="secret">
+      <div class="crystal">💎</div>
+      <div class="crystal-label">Кристалл Истины</div>
+    </div>
+
+    <!-- Particles container -->
+    <div class="particles" id="particles"></div>
+  </div>
+</div>
+
+<div class="messages" id="messages"></div>
+
+<!-- NEW: Restart Button -->
+<button class="restart-btn" id="restartBtn" onclick="restartGame()">🔄 Начать заново</button>
+
+<div class="hint">💡 Нажимай на предметы в комнате, чтобы взаимодействовать с ними</div>
+
+<div class="confetti-container" id="confetti"></div>
+
+<script>
+  // ── State ──
+  let keyFound = false;
+  let lightOn = false;
+  let doorOpen = false;
+
+  // ── DOM ──
+  const keyEl         = document.getElementById('key');
+  const lightSwitchEl = document.getElementById('lightSwitch');
+  const doorEl        = document.getElementById('door');
+  const secretEl      = document.getElementById('secret');
+  const roomEl        = document.getElementById('room');
+  const msgBox        = document.getElementById('messages');
+  const restartBtn    = document.getElementById('restartBtn');
+  
+  const statusKey    = document.getElementById('statusKey');
+  const statusLight  = document.getElementById('statusLight');
+  const statusDoor   = document.getElementById('statusDoor');
+  const statusSec    = document.getElementById('statusSecret');
+  const particlesEl  = document.getElementById('particles');
+
+  // ── Initial message ──
+  addMsg('info', '🏠 Ты в тёмной комнате. Осмотрись… Где-то здесь спрятан ключ.');
+
+  // ── Actions ──
+  function clickKey() {
+    if (keyFound || doorOpen) return;
+
+    keyFound = true;
+    keyEl.classList.add('found');
+    statusKey.classList.add('active');
+
+    spawnParticles(keyEl, '#f5c518', 14);
+    addMsg('success', '🔑 Ты нашёл ключ! Он тёплый и слегка светится…');
+
+    setTimeout(() => {
+      addMsg('info', '💡 Но в комнате слишком темно. Попробуй найти выключатель.');
+    }, 800);
+  }
+
+  function clickSwitch() {
+    if (lightOn || doorOpen) return;
+
+    lightOn = true;
+    lightSwitchEl.classList.add('on');
+    roomEl.classList.add('lights-on');
+    statusLight.classList.add('done');
+
+    spawnParticles(lightSwitchEl, '#ffffff', 10);
+    addMsg('success', '💡 Свет включён! Теперь в комнате гораздо лучше видно.');
+    
+    if (keyFound) {
+      setTimeout(() => {
+        addMsg('info', '🚪 Отлично! Теперь у тебя есть ключ и свет. Попробуй открыть дверь.');
+      }, 800);
+    }
+  }
+
+  function clickDoor() {
+    if (doorOpen) return;
+
+    // Условие 1: Нет ключа
+    if (!keyFound) {
+      addMsg('warn', '🔒 Дверь заперта. Сначала найди ключ!');
+      shakeDoor();
+      return;
+    }
+
+    // Условие 2: Есть ключ, но нет света (НОВОЕ УСЛОВИЕ)
+    if (!lightOn) {
+      addMsg('warn', '🌑 Слишком темно, чтобы найти замочную скважину. Включи свет!');
+      shakeDoor();
+      return;
+    }
+
+    // Условие 3: Ключ есть И свет включён → Успех
+    doorOpen = true;
+    doorEl.classList.add('open');
+    statusDoor.classList.add('done');
+    statusKey.classList.remove('active');
+    statusKey.classList.add('done');
+
+    // НОВОЕ СООБЩЕНИЕ
+    addMsg('success', '🚪 Секретная комната открыта!');
+
+    setTimeout(() => {
+      secretEl.classList.add('visible');
+      statusSec.classList.add('done');
+      spawnParticles(secretEl, '#a855f7', 20);
+
+      addMsg('epic', '✨ Квест завершён! Ты нашёл Кристалл Истины! ✨');
+      launchConfetti();
+      
+      // Показываем кнопку "Начать заново"
+      restartBtn.style.display = 'block';
+      restartBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 900);
+  }
+
+  // ── NEW: Restart Logic ──
+  function restartGame() {
+    // 1. Сброс переменных состояния
+    keyFound = false;
+    lightOn = false;
+    doorOpen = false;
+
+    // 2. Сброс визуальных классов объектов
+    keyEl.classList.remove('found');
+    lightSwitchEl.classList.remove('on');
+    doorEl.classList.remove('open');
+    secretEl.classList.remove('visible');
+    roomEl.classList.remove('lights-on');
+
+    // 3. Сброс индикаторов прогресса
+    statusKey.className = 'status-item';
+    statusLight.className = 'status-item';
+    statusDoor.className = 'status-item';
+    statusSec.className = 'status-item';
+
+    // 4. Очистка сообщений и скрытие кнопки рестарта
+    msgBox.innerHTML = '';
+    restartBtn.style.display = 'none';
+
+    // 5. Возврат к начальному сообщению
+    addMsg('info', '🏠 Ты снова в тёмной комнате. Осмотрись… Где-то здесь спрятан ключ.');
+    
+    // Прокрутка наверх
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Helpers ──
+  function shakeDoor() {
+    doorEl.style.animation = 'none';
+    doorEl.offsetHeight; // trigger reflow
+    doorEl.style.animation = 'doorShake .4s ease';
+  }
+
+  function addMsg(type, text) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + type;
+    div.textContent = text;
+    msgBox.appendChild(div);
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function spawnParticles(anchor, color, count) {
+    const rect = anchor.getBoundingClientRect();
+    const roomRect = particlesEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2 - roomRect.left;
+    const cy = rect.top + rect.height / 2 - roomRect.top;
+
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = cx + 'px';
+      p.style.top = cy + 'px';
+      p.style.background = color;
+      p.style.boxShadow = '0 0 6px ' + color;
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 60;
+      p.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+      p.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+      particlesEl.appendChild(p);
+      requestAnimationFrame(() => p.classList.add('burst'));
+      setTimeout(() => p.remove(), 1100);
+    }
+  }
+
+  function launchConfetti() {
+    const container = document.getElementById('confetti');
+    const colors = ['#e94560','#f5c518','#a855f7','#00d68f','#3b82f6','#f97316'];
+    for (let i = 0; i < 60; i++) {
+      const c = document.createElement('div');
+      c.className = 'confetti-piece';
+      c.style.left = Math.random() * 100 + '%';
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.borderRadius = Math.random() > .5 ? '50%' : '2px';
+      c.style.setProperty('--dur', (2 + Math.random() * 2) + 's');
+      c.style.setProperty('--delay', (Math.random() * .8) + 's');
+      c.style.setProperty('--rot', (Math.random() * 720 - 360) + 'deg');
+      container.appendChild(c);
+      requestAnimationFrame(() => c.classList.add('fall'));
+      setTimeout(() => c.remove(), 5000);
+    }
+  }
+
+  // ── Injected Animations ──
+  const shakeStyle = document.createElement('style');
+  shakeStyle.textContent = `
+    @keyframes doorShake {
+      0%,100%{transform:translateX(0)}
+      20%{transform:translateX(-4px)}
+      40%{transform:translateX(4px)}
+      60%{transform:translateX(-3px)}
+      80%{transform:translateX(3px)}
+    }
+  `;
+  document.head.appendChild(shakeStyle);
+</script>
+
+</body>
+</html>
